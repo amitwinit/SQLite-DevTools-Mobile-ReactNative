@@ -34,15 +34,13 @@ jobs:
 
       # ── Electron App ───────────────────────────────
       - name: Install app dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build Vite app for Electron
         run: npm run build:electron
 
       - name: Build Electron installer
-        run: npx electron-builder --win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --publish never
 
       - name: List Electron output
         run: dir electron-dist

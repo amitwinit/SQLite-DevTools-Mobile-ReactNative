@@ -78,5 +78,7 @@ bridge/adb-bridge.exe
 bridge/node_modules/
 bridge/package-lock.json
 
+package-lock.json
+
 # Electron
 electron-dist/

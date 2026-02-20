@@ -35,7 +35,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AdbSqliteViewer/SQLite-DevTools-Mobile-ReactNative"
+    "url": "https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative"
   },
   "dependencies": {},
   "devDependencies": {
