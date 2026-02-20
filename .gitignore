@@ -80,3 +80,4 @@ bridge/package-lock.json
 
 # Electron
 electron-dist/
+package-lock.json
