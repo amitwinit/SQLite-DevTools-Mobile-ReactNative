@@ -5,6 +5,14 @@ const path = require("path");
 let bridge = null;
 let mainWindow = null;
 
+function setupBundledAdb() {
+  if (app.isPackaged) {
+    const toolsDir = path.join(process.resourcesPath, "tools");
+    const sep = process.platform === "win32" ? ";" : ":";
+    process.env.PATH = toolsDir + sep + (process.env.PATH || "");
+  }
+}
+
 function getBridgePath() {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, "bridge", "server.js");
@@ -73,6 +81,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  setupBundledAdb();
   try {
     console.log("Starting ADB bridge server...");
     await startBridge();

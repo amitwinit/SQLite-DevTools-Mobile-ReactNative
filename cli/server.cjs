@@ -4,7 +4,8 @@ const http = require("http");
 const path = require("path");
 const fs = require("fs");
 const { exec } = require("child_process");
-const { handleRequest: bridgeHandler, checkAdb } = require("../bridge/server.js");
+const { handleRequest: bridgeHandler } = require("../bridge/server.js");
+const { ensureAdb } = require("./ensure-adb.cjs");
 
 const DIST_DIR = path.join(__dirname, "..", "dist");
 
@@ -86,13 +87,13 @@ async function start(port) {
     process.exit(1);
   }
 
-  // Check adb (warn only — WebUSB still works without it)
+  // Ensure adb is available (downloads if needed)
   try {
-    const version = await checkAdb();
-    console.log(`Found: ${version}`);
+    const version = await ensureAdb();
+    console.log(`  adb: ${version}`);
   } catch (err) {
-    console.warn(`WARNING: ${err.message}`);
-    console.warn("ADB bridge features will not work.");
+    console.warn(`  WARNING: ${err.message}`);
+    console.warn("  ADB bridge features will not work.");
   }
 
   const server = http.createServer(requestHandler);

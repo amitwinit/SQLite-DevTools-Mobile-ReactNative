@@ -1,151 +1,86 @@
-# SQLite DevTools for Mobile (React Native)
+# ADB SQLite DevTools
 
-A browser-based tool for inspecting SQLite databases on Android devices. Browse tables, view schemas, and execute SQL queries directly on your device.
+Inspect SQLite databases on Android devices. Browse tables, view schemas, and run SQL queries — all from your browser.
 
-## Four Ways to Use
+## Quick Start (npm)
 
-### Option 1: Desktop App (Easiest)
-
-Download the installer from [Releases](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases) and run it. The app bundles the ADB bridge server — it starts automatically when you launch the app. No separate downloads, no terminal commands.
-
-**Requirements:**
-- Windows (NSIS installer)
-- `adb` on your PATH (Android SDK Platform-Tools)
-- Android device with USB debugging enabled
-
-### Option 2: Hosted Version + ADB Bridge (Best for React Native Developers)
-
-Use the deployed version at **[amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative](https://amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative/)** together with the **ADB Bridge** — a small localhost server that wraps `adb shell` commands. This lets you inspect databases while ADB stays running for React Native development.
-
-**Setup:**
-
-1. Download `adb-bridge.exe` from [Releases](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases), or build it yourself:
-   ```bash
-   cd bridge
-   npm install
-   npm run build    # produces adb-bridge.exe
-   ```
-
-2. Run the bridge:
-   ```bash
-   # Either run the exe directly:
-   adb-bridge.exe
-
-   # Or with Node.js:
-   cd bridge && node server.js
-   ```
-
-3. Open the hosted website — it auto-detects the bridge and connects through it.
-
-**How it works:**
+```bash
+npm install --save-dev adb-sqlite-viewer
+npx sqlite-viewer
 ```
-Hosted website (HTTPS) ──HTTP──> localhost:15555 (bridge) ──> adb shell ──> Device
+
+Opens a local server at `http://127.0.0.1:8085` with the full UI and ADB bridge built in. One command, no extra downloads.
+
+```bash
+# Custom port
+npx sqlite-viewer --port 3000
 ```
-The website detects the bridge on startup and routes all commands through HTTP instead of WebUSB. No need to kill ADB.
 
-### Option 3: Hosted Version with WebUSB (No Setup Required)
+**Requirements:** `adb` on your PATH ([Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools)) and a USB-connected Android device with debugging enabled.
 
-Use the deployed version at **[amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative](https://amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative/)**
+## All Options
 
-This version uses **WebUSB** to communicate with your Android device directly from the browser. No backend server needed.
+### npm Package (Recommended for dev workflows)
 
-**Requirements:**
-- Chrome or Edge (WebUSB is not supported in Firefox/Safari)
-- Android device with USB debugging enabled
-- You must **stop the local ADB server** first: `adb kill-server`
+Install into any project and run alongside your app:
 
-**Important:** WebUSB and the local ADB server cannot use the USB interface at the same time. If you are actively developing a React Native app and need ADB running, use **Option 1** or **Option 2** instead.
+```bash
+npm install --save-dev adb-sqlite-viewer
+```
 
-**Steps:**
-1. Run `adb kill-server` in your terminal
-2. Open the hosted URL in Chrome/Edge
-3. Click **Connect Device** and select your phone from the USB picker
-4. Approve the USB debugging prompt on your phone (first time only)
-5. Select a package and database, then start querying
+Add to your `package.json` scripts:
 
-### Option 4: Local Flask Server (Legacy)
+```json
+{
+  "scripts": {
+    "sqlite-viewer": "sqlite-viewer"
+  }
+}
+```
 
-If you are developing a React Native app and need ADB running alongside, use the local Flask backend. Both tools share the same ADB server so there is no conflict.
+Then `npm run sqlite-viewer` opens the viewer. Works great alongside React Native, Flutter, or any Android project.
 
-**Setup:**
+### Desktop App
 
-1. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+Download the Windows installer from [Releases](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases). Double-click to launch — the bridge server starts automatically.
 
-2. Copy and configure environment:
-   ```bash
-   cp .env.example .env
-   ```
+### Hosted Version + ADB Bridge
 
-   Update `.env` with your configuration:
-   - `DEVICE_SERIAL` — run `adb devices` to find it
-   - `PACKAGE_NAME` — your app's package name
-   - `DB_NAME` — the SQLite database filename
-   - `PYTHON_TOOLS_PATH` — path to the python_tools directory
+Use the deployed version at **[amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative](https://amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative/)** together with the standalone ADB Bridge.
 
-3. Run the server:
-   ```bash
-   python app.py
-   ```
+1. Download `adb-bridge.exe` from [Releases](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases)
+2. Run `adb-bridge.exe`
+3. Open the hosted website — it auto-detects the bridge
 
-4. Open http://localhost:5001 in any browser
+```
+Website (HTTPS) ──HTTP──> localhost:15555 (bridge) ──> adb shell ──> Device
+```
+
+### Hosted Version with WebUSB (No install required)
+
+Open **[amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative](https://amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative/)** in Chrome/Edge. Uses WebUSB to talk directly to the device — no server needed.
+
+**Note:** Requires `adb kill-server` first (WebUSB and ADB can't share the USB interface). Not suitable when you need ADB running for development.
 
 ## When to Use Which
 
-| Scenario | Use |
-|----------|-----|
-| Just want it to work, one click | Desktop App (Option 1) |
-| Active React Native development | Desktop App (Option 1) or ADB Bridge (Option 2) |
-| Quick DB inspection, no local setup | WebUSB (Option 3) |
-| Sharing with teammates who don't have Python | WebUSB (Option 3) |
-| Need ADB for other tools simultaneously | Desktop App (Option 1) or ADB Bridge (Option 2) |
-
-## Environment Variables (Option 4)
-
-### Application Configuration
-- `PACKAGE_NAME`: Android app package name
-- `DB_NAME`: Database name on the device
-- `DEVICE_SERIAL`: ADB device serial number
-- `PYTHON_TOOLS_PATH`: Path to python_tools directory
-
-### Flask Server Configuration
-- `FLASK_HOST`: Flask server host (default: 0.0.0.0)
-- `FLASK_PORT`: Flask server port (default: 5001)
-- `FLASK_DEBUG`: Enable debug mode (default: True)
-
-### Cache Configuration
-- `USE_CACHE`: Enable database caching (default: True)
-- `FORCE_LOCAL`: Force local database operations (default: False)
+| Scenario | Recommended |
+|----------|-------------|
+| Active development (React Native, Flutter, etc.) | `npx sqlite-viewer` or Desktop App |
+| Quick one-off DB inspection | WebUSB (hosted version) |
+| CI or shared dev environment | `npx sqlite-viewer` |
+| No Node.js installed | Desktop App or WebUSB |
 
 ## Development
 
-To work on the WebUSB frontend:
-
 ```bash
 npm install
-npm run dev
+npm run dev          # Vite dev server
+npm run build        # Build for GitHub Pages
+npm run electron:dev # Build + launch Electron app
+npm run electron:build # Build Electron installer
 ```
 
-To build for production (GitHub Pages):
+## License
 
-```bash
-npm run build
-```
-
-The built files go to `dist/` and are deployed to GitHub Pages automatically on push to `main`.
-
-To run the Electron desktop app in development:
-
-```bash
-npm run electron:dev
-```
-
-To build the Electron installer:
-
-```bash
-npm run electron:build
-```
-
-The installer is output to `electron-dist/`.
+MIT

@@ -39,6 +39,14 @@ jobs:
       - name: Build Vite app for Electron
         run: npm run build:electron
 
+      - name: Bundle ADB for Electron
+        run: |
+          mkdir tools
+          copy "%ANDROID_HOME%\platform-tools\adb.exe" tools\
+          copy "%ANDROID_HOME%\platform-tools\AdbWinApi.dll" tools\
+          copy "%ANDROID_HOME%\platform-tools\AdbWinUsbApi.dll" tools\
+        shell: cmd
+
       - name: Build Electron installer
         run: npx electron-builder --win --publish never
 
