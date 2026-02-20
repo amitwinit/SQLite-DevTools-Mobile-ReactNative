@@ -1,16 +1,41 @@
 {
   "name": "adb-sqlite-viewer",
   "version": "1.0.0",
-  "private": true,
+  "description": "ADB SQLite database viewer for Android — inspect tables, schemas, and run queries on-device",
   "type": "module",
   "main": "electron/main.cjs",
+  "bin": {
+    "sqlite-viewer": "./cli/bin.cjs"
+  },
+  "files": [
+    "cli/",
+    "bridge/server.js",
+    "dist/"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "build:electron": "cross-env BUILD_TARGET=electron vite build",
+    "build:npm": "cross-env BUILD_TARGET=npm vite build",
     "electron:dev": "cross-env BUILD_TARGET=electron vite build && electron .",
-    "electron:build": "cross-env BUILD_TARGET=electron vite build && electron-builder"
+    "electron:build": "cross-env BUILD_TARGET=electron vite build && electron-builder",
+    "start": "node cli/bin.cjs",
+    "prepublishOnly": "npm run build:npm"
+  },
+  "keywords": [
+    "adb",
+    "sqlite",
+    "android",
+    "devtools",
+    "react-native",
+    "database",
+    "viewer"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AdbSqliteViewer/SQLite-DevTools-Mobile-ReactNative"
   },
   "dependencies": {},
   "devDependencies": {

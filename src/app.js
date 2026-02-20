@@ -113,7 +113,10 @@ function showBridgeConnected() {
   const statusEl = $("connectionStatus");
   statusEl.textContent = "ADB Bridge";
   statusEl.className = "connection-status bridge";
-  $("deviceStatus").textContent = "Bridge connected on :15555";
+  const bridgePort = adbClient.bridgeUrl
+    ? new URL(adbClient.bridgeUrl).port
+    : "15555";
+  $("deviceStatus").textContent = `Bridge connected on :${bridgePort}`;
   $("deviceStatus").classList.add("ok");
 
   const btn = $("usbConnectBtn");

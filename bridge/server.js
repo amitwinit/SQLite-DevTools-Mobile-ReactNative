@@ -1,8 +1,6 @@
 const http = require("http");
 const { execFile, spawn } = require("child_process");
 
-const PORT = 15555;
-const HOST = "127.0.0.1";
 const TIMEOUT = 30_000;
 const MAX_BUFFER = 10 * 1024 * 1024;
 
@@ -166,61 +164,88 @@ async function handleShell(req, res) {
   }
 }
 
-// ── Server ─────────────────────────────────────────────
+// ── Exports (for use by cli/server.cjs and electron) ───
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${HOST}:${PORT}`);
-  const path = url.pathname;
+/**
+ * Dispatch an incoming request to the appropriate API handler.
+ * Returns true if a route was matched, false otherwise.
+ */
+async function handleRequest(req, res) {
+  const url = new URL(req.url, "http://localhost");
+  const p = url.pathname;
 
-  // CORS preflight
   if (req.method === "OPTIONS") {
     cors(res);
     res.writeHead(204);
     res.end();
-    return;
+    return true;
   }
 
   try {
-    if (path === "/api/ping" && req.method === "GET") {
+    if (p === "/api/ping" && req.method === "GET") {
       await handlePing(req, res);
-    } else if (path === "/api/devices" && req.method === "GET") {
+      return true;
+    } else if (p === "/api/devices" && req.method === "GET") {
       await handleDevices(req, res);
-    } else if (path === "/api/shell" && req.method === "POST") {
+      return true;
+    } else if (p === "/api/shell" && req.method === "POST") {
       await handleShell(req, res);
-    } else {
-      json(res, 404, { error: "Not found" });
+      return true;
     }
   } catch (err) {
     json(res, 500, { error: err.message });
+    return true;
   }
-});
 
-// ── Startup ────────────────────────────────────────────
+  return false;
+}
 
-function verifyAdb() {
-  return new Promise((resolve) => {
+/**
+ * Verify adb is in PATH. Returns the version string, or rejects.
+ */
+function checkAdb() {
+  return new Promise((resolve, reject) => {
     execFile("adb", ["version"], { timeout: 5000 }, (err, stdout) => {
       if (err) {
-        console.error("ERROR: 'adb' not found in PATH.");
-        console.error("Install Android SDK Platform-Tools and ensure 'adb' is on your PATH.");
-        if (process.send) process.send({ type: "error", message: "adb not found in PATH" });
-        process.exit(1);
+        reject(new Error("'adb' not found in PATH. Install Android SDK Platform-Tools."));
+        return;
       }
-      const firstLine = stdout.split("\n")[0].trim();
-      console.log(`Found: ${firstLine}`);
-      resolve();
+      resolve(stdout.split("\n")[0].trim());
     });
   });
 }
 
-verifyAdb().then(() => {
-  server.listen(PORT, HOST, () => {
-    console.log(`ADB Bridge listening on http://${HOST}:${PORT}`);
-    console.log("Endpoints:");
-    console.log("  GET  /api/ping     — health check");
-    console.log("  GET  /api/devices  — list connected devices");
-    console.log("  POST /api/shell    — run adb shell command");
-    console.log("\nPress Ctrl+C to stop.");
-    if (process.send) process.send({ type: "ready" });
+module.exports = { handleRequest, checkAdb };
+
+// ── Standalone startup (node bridge/server.js) ─────────
+
+if (require.main === module) {
+  const PORT = 15555;
+  const HOST = "127.0.0.1";
+
+  const server = http.createServer(async (req, res) => {
+    const handled = await handleRequest(req, res);
+    if (!handled) {
+      json(res, 404, { error: "Not found" });
+    }
   });
-});
+
+  checkAdb()
+    .then((versionLine) => {
+      console.log(`Found: ${versionLine}`);
+      server.listen(PORT, HOST, () => {
+        console.log(`ADB Bridge listening on http://${HOST}:${PORT}`);
+        console.log("Endpoints:");
+        console.log("  GET  /api/ping     — health check");
+        console.log("  GET  /api/devices  — list connected devices");
+        console.log("  POST /api/shell    — run adb shell command");
+        console.log("\nPress Ctrl+C to stop.");
+        if (process.send) process.send({ type: "ready" });
+      });
+    })
+    .catch((err) => {
+      console.error("ERROR:", err.message);
+      if (process.send) process.send({ type: "error", message: err.message });
+      process.exit(1);
+    });
+}

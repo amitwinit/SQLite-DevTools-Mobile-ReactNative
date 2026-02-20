@@ -1,10 +1,10 @@
 import { defineConfig } from "vite";
 
-const isElectron = process.env.BUILD_TARGET === "electron";
+const isLocal = !!process.env.BUILD_TARGET; // "electron" or "npm"
 
 export default defineConfig({
   root: "src",
-  base: isElectron ? "./" : "/SQLite-DevTools-Mobile-ReactNative/",
+  base: isLocal ? "./" : "/SQLite-DevTools-Mobile-ReactNative/",
   build: {
     outDir: "../dist",
     emptyOutDir: true,

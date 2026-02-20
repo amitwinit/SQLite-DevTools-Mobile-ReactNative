@@ -35,21 +35,31 @@ export class AdbClient {
   // ──────────────── Bridge transport ────────────────
 
   /**
-   * Attempt to connect to the localhost ADB bridge server.
+   * Attempt to connect to the ADB bridge server.
+   * Tries same-origin first (for combined server), then standalone bridge port.
    * Returns true if bridge is reachable, false otherwise.
    */
   async connectBridge(port = 15555) {
-    const url = `http://127.0.0.1:${port}`;
-    try {
-      const resp = await fetch(`${url}/api/ping`, { signal: AbortSignal.timeout(2000) });
-      const data = await resp.json();
-      if (data.ok) {
-        this.mode = "bridge";
-        this.bridgeUrl = url;
-        return true;
+    const candidates = [];
+    const isLocalhost = location.hostname === "127.0.0.1" || location.hostname === "localhost";
+    if (isLocalhost) candidates.push(location.origin);
+    candidates.push(`http://127.0.0.1:${port}`);
+
+    const tried = new Set();
+    for (const url of candidates) {
+      if (tried.has(url)) continue;
+      tried.add(url);
+      try {
+        const resp = await fetch(`${url}/api/ping`, { signal: AbortSignal.timeout(2000) });
+        const data = await resp.json();
+        if (data.ok) {
+          this.mode = "bridge";
+          this.bridgeUrl = url;
+          return true;
+        }
+      } catch {
+        /* try next */
       }
-    } catch {
-      /* bridge not running */
     }
     return false;
   }
