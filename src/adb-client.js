@@ -350,7 +350,7 @@ export class AdbClient {
     // 1. Check app dir
     try {
       const v = await this.runAs("./sqlite3 -version");
-      if (v.includes("3.") || v.toLowerCase().includes("sqlite")) {
+      if (/^3\.\d+/.test(v.trim())) {
         this.sqlite3Path = "./sqlite3";
         return this.sqlite3Path;
       }
@@ -367,13 +367,13 @@ export class AdbClient {
     for (const p of systemPaths) {
       try {
         const v = await this.shell(`${p} -version 2>&1`);
-        if (v.includes("3.") || v.toLowerCase().includes("sqlite")) {
+        if (/^3\.\d+/.test(v.trim())) {
           // Try to copy into app dir
           try {
             await this.runAs(`cp ${p} ./sqlite3`);
             await this.runAs("chmod 755 ./sqlite3");
             const verify = await this.runAs("./sqlite3 -version");
-            if (verify.includes("3.")) {
+            if (/^3\.\d+/.test(verify.trim())) {
               this.sqlite3Path = "./sqlite3";
               return this.sqlite3Path;
             }
@@ -385,6 +385,36 @@ export class AdbClient {
         }
       } catch {
         /* not at this path */
+      }
+    }
+
+    // 3. Bridge mode: push bundled sqlite3-arm64 to device
+    if (this.mode === "bridge" && this.bridgeUrl) {
+      try {
+        const pushResp = await fetch(`${this.bridgeUrl}/api/push-sqlite3`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: this.bridgeSerial || undefined }),
+        });
+        const pushData = await pushResp.json();
+        if (pushResp.ok && pushData.ok) {
+          // Pushed successfully — copy into app dir
+          try {
+            await this.runAs("cp /data/local/tmp/sqlite3 ./sqlite3");
+            await this.runAs("chmod 755 ./sqlite3");
+            const verify = await this.runAs("./sqlite3 -version");
+            if (/^3\.\d+/.test(verify.trim())) {
+              this.sqlite3Path = "./sqlite3";
+              return this.sqlite3Path;
+            }
+          } catch {
+            /* copy to app dir failed, use tmp path directly */
+          }
+          this.sqlite3Path = "/data/local/tmp/sqlite3";
+          return this.sqlite3Path;
+        }
+      } catch {
+        /* push failed */
       }
     }
 

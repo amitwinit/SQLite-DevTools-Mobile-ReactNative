@@ -11,6 +11,7 @@
     "cli/",
     "bridge/server.js",
     "bridge/package.json",
+    "sqlite3-arm64",
     "dist/"
   ],
   "scripts": {
@@ -71,6 +72,10 @@
       {
         "from": "tools/",
         "to": "tools/"
+      },
+      {
+        "from": "sqlite3-arm64",
+        "to": "sqlite3-arm64"
       }
     ],
     "win": {

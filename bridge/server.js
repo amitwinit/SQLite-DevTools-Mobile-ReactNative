@@ -1,5 +1,7 @@
 const http = require("http");
 const { execFile, spawn } = require("child_process");
+const path = require("path");
+const fs = require("fs");
 
 const TIMEOUT = 30_000;
 const MAX_BUFFER = 10 * 1024 * 1024;
@@ -164,6 +166,51 @@ async function handleShell(req, res) {
   }
 }
 
+async function handlePushSqlite3(req, res) {
+  let body;
+  try {
+    body = JSON.parse(await readBody(req));
+  } catch {
+    body = {};
+  }
+  const { serial } = body;
+
+  // Locate bundled sqlite3-arm64 binary (check multiple locations)
+  const candidates = [
+    path.join(__dirname, "..", "sqlite3-arm64"),          // npm package / dev
+    path.join(path.dirname(process.execPath), "sqlite3-arm64"), // next to pkg exe
+  ];
+  const binaryPath = candidates.find((p) => fs.existsSync(p));
+  if (!binaryPath) {
+    json(res, 404, { error: "Bundled sqlite3-arm64 binary not found. Place it next to adb-bridge.exe." });
+    return;
+  }
+
+  try {
+    // Push to /data/local/tmp/
+    const pushArgs = [];
+    if (serial) pushArgs.push("-s", serial);
+    pushArgs.push("push", binaryPath, "/data/local/tmp/sqlite3");
+    await adb(pushArgs);
+
+    // Make executable
+    const chmodArgs = [];
+    if (serial) chmodArgs.push("-s", serial);
+    chmodArgs.push("shell", "chmod", "755", "/data/local/tmp/sqlite3");
+    await adb(chmodArgs);
+
+    // Verify
+    const verifyArgs = [];
+    if (serial) verifyArgs.push("-s", serial);
+    verifyArgs.push("shell", "/data/local/tmp/sqlite3", "-version");
+    const version = await adb(verifyArgs);
+
+    json(res, 200, { ok: true, version: version.trim() });
+  } catch (err) {
+    json(res, 500, { error: err.message });
+  }
+}
+
 // ── Exports (for use by cli/server.cjs and electron) ───
 
 /**
@@ -190,6 +237,9 @@ async function handleRequest(req, res) {
       return true;
     } else if (p === "/api/shell" && req.method === "POST") {
       await handleShell(req, res);
+      return true;
+    } else if (p === "/api/push-sqlite3" && req.method === "POST") {
+      await handlePushSqlite3(req, res);
       return true;
     }
   } catch (err) {
