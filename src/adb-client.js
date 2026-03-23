@@ -258,15 +258,29 @@ export class AdbClient {
    * Mirrors the logic from the Python backend.
    */
   async getPackages() {
+    // Try debuggable-only first (run-as probe)
     const script =
       'for p in $(pm list packages --user 0 -3 2>/dev/null | tr -d "\\r" | sed "s/package://"); do ' +
       "run-as $p id 2>/dev/null 1>/dev/null && echo $p; " +
       "done";
     const output = await this.shell(script);
-    const packages = output
+    let packages = output
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
+
+    // Fallback: if run-as found nothing, list all third-party packages
+    // (common on emulators/WayDroid where run-as doesn't work)
+    if (packages.length === 0) {
+      const fallback = await this.shell(
+        'pm list packages -3 2>/dev/null | tr -d "\\r" | sed "s/package://"'
+      );
+      packages = fallback
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+    }
+
     packages.sort();
     return packages;
   }
