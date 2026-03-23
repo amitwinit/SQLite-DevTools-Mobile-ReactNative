@@ -211,6 +211,59 @@ async function handlePushSqlite3(req, res) {
   }
 }
 
+async function handlePullDb(req, res) {
+  let body;
+  try {
+    body = JSON.parse(await readBody(req));
+  } catch {
+    json(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const { serial, packageName, dbPath } = body;
+  if (!packageName || !dbPath) {
+    json(res, 400, { error: "Missing packageName or dbPath" });
+    return;
+  }
+
+  const tmpFile = path.join(
+    require("os").tmpdir(),
+    `adb-pull-${Date.now()}.db`
+  );
+
+  try {
+    // Copy from app sandbox to /data/local/tmp/ (run-as required)
+    await adbShell(
+      `run-as ${packageName} cat ${dbPath} > /data/local/tmp/_pull_db.tmp`,
+      serial
+    );
+
+    // Pull to host
+    const pullArgs = [];
+    if (serial) pullArgs.push("-s", serial);
+    pullArgs.push("pull", "/data/local/tmp/_pull_db.tmp", tmpFile);
+    await adb(pullArgs);
+
+    // Stream the file back
+    const stat = fs.statSync(tmpFile);
+    const fileName = dbPath.split("/").pop() || "database.db";
+    cors(res);
+    res.writeHead(200, {
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Content-Length": stat.size,
+    });
+    const stream = fs.createReadStream(tmpFile);
+    stream.pipe(res);
+    stream.on("end", () => {
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    });
+  } catch (err) {
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    json(res, 500, { error: err.message });
+  }
+}
+
 // ── Exports (for use by cli/server.cjs and electron) ───
 
 /**
@@ -240,6 +293,9 @@ async function handleRequest(req, res) {
       return true;
     } else if (p === "/api/push-sqlite3" && req.method === "POST") {
       await handlePushSqlite3(req, res);
+      return true;
+    } else if (p === "/api/pull-db" && req.method === "POST") {
+      await handlePullDb(req, res);
       return true;
     }
   } catch (err) {

@@ -82,6 +82,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("refreshTablesBtn").addEventListener("click", refreshTables);
   $("clearQueryBtn").addEventListener("click", clearQuery);
   $("formatQueryBtn").addEventListener("click", formatQuery);
+  $("downloadDbBtn").addEventListener("click", downloadDatabase);
   $("openLocalBtn").addEventListener("click", () => $("localFileInput").click());
   $("localFileInput").addEventListener("change", onLocalFileSelected);
   $("closeLocalBtn").addEventListener("click", closeLocalFile);
@@ -882,6 +883,67 @@ function formatQuery() {
   );
   query = query.replace(/,/g, ",\n  ");
   textarea.value = query;
+}
+
+// ──────────────── Download Database ────────────────
+
+async function downloadDatabase() {
+  const statusBar = $("statusBar");
+
+  // Local mode: export from sql.js in-memory db
+  if (appMode === "local" && localDb.isOpen()) {
+    const data = localDb.db.export();
+    const blob = new Blob([data], { type: "application/octet-stream" });
+    triggerDownload(blob, localDb.fileName || "database.db");
+    statusBar.textContent = `Downloaded ${localDb.fileName}`;
+    return;
+  }
+
+  // Device mode: need bridge + package + database selected
+  if (adbClient.mode !== "bridge" || !adbClient.bridgeUrl) {
+    statusBar.textContent = "Download requires ADB Bridge connection";
+    return;
+  }
+  if (!selectedPackageName || !adbClient.dbPath) {
+    statusBar.textContent = "Select a package and database first";
+    return;
+  }
+
+  statusBar.textContent = "Downloading database...";
+  try {
+    const resp = await fetch(`${adbClient.bridgeUrl}/api/pull-db`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        serial: adbClient.bridgeSerial || undefined,
+        packageName: selectedPackageName,
+        dbPath: adbClient.dbPath,
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+
+    const blob = await resp.blob();
+    const fileName = adbClient.dbName || "database.db";
+    triggerDownload(blob, fileName);
+    statusBar.textContent = `Downloaded ${fileName}`;
+  } catch (err) {
+    statusBar.textContent = `Download failed: ${err.message}`;
+  }
+}
+
+function triggerDownload(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ──────────────── Local File Upload ────────────────
