@@ -84,6 +84,10 @@
     "win": {
       "target": "nsis"
     },
+    "linux": {
+      "target": "AppImage",
+      "category": "Development"
+    },
     "publish": {
       "provider": "github",
       "owner": "amitwinit",

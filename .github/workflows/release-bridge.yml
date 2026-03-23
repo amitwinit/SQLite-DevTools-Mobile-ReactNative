@@ -10,7 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  # ── Windows Build ─────────────────────────────────
+  build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,15 +19,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: https://registry.npmjs.org
 
-      # ── Set version from tag (before builds) ──────
       - name: Set version from tag
         if: startsWith(github.ref, 'refs/tags/v')
         run: npm version ${{ github.ref_name }} --no-git-tag-version --allow-same-version
         shell: bash
 
-      # ── ADB Bridge ─────────────────────────────────
+      # Bridge exe
       - name: Install bridge dependencies
         run: npm install
         working-directory: bridge
@@ -35,10 +34,7 @@ jobs:
         run: npx pkg server.js --target node20-win-x64 --output adb-bridge.exe
         working-directory: bridge
 
-      - name: Verify adb-bridge.exe
-        run: dir bridge\adb-bridge.exe
-
-      # ── Electron App ───────────────────────────────
+      # Electron installer
       - name: Install app dependencies
         run: npm install
 
@@ -56,34 +52,120 @@ jobs:
       - name: Build Electron installer
         run: npx electron-builder --win --publish never
 
-      - name: List Electron output
-        run: dir electron-dist
-
-      # ── Artifacts ──────────────────────────────────
-      - name: Upload adb-bridge artifact
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: adb-bridge
-          path: bridge/adb-bridge.exe
+          name: windows-builds
+          path: |
+            bridge/adb-bridge.exe
+            electron-dist/*.exe
+            electron-dist/*.yml
+            electron-dist/*.blockmap
 
-      - name: Upload Electron installer artifact
+  # ── Linux Build ───────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm version ${{ github.ref_name }} --no-git-tag-version --allow-same-version
+
+      # Bridge binary
+      - name: Install bridge dependencies
+        run: npm install
+        working-directory: bridge
+
+      - name: Build adb-bridge-linux
+        run: npx pkg server.js --target node20-linux-x64 --output adb-bridge-linux
+        working-directory: bridge
+
+      # Electron AppImage
+      - name: Install app dependencies
+        run: npm install
+
+      - name: Build Vite app for Electron
+        run: npm run build:electron
+
+      - name: Bundle ADB for Electron
+        run: |
+          mkdir -p tools
+          if [ -d "$ANDROID_HOME/platform-tools" ]; then
+            cp "$ANDROID_HOME/platform-tools/adb" tools/
+          else
+            echo "Android platform-tools not found, downloading..."
+            curl -sL https://dl.google.com/android/repository/platform-tools-latest-linux.zip -o pt.zip
+            unzip -qo pt.zip
+            cp platform-tools/adb tools/
+            rm -rf platform-tools pt.zip
+          fi
+          chmod +x tools/adb
+
+      - name: Build Electron AppImage
+        run: npx electron-builder --linux AppImage --publish never
+
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: electron-app
-          path: electron-dist/*.exe
+          name: linux-builds
+          path: |
+            bridge/adb-bridge-linux
+            electron-dist/*.AppImage
+            electron-dist/*.yml
 
-      # ── Release ────────────────────────────────────
+  # ── Release & Publish ────────────────────────────
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-builds
+          path: artifacts/windows
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-builds
+          path: artifacts/linux
+
+      - name: List all artifacts
+        run: find artifacts -type f | sort
+
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            bridge/adb-bridge.exe
-            electron-dist/*.exe
-            electron-dist/latest.yml
+            artifacts/windows/bridge/adb-bridge.exe
+            artifacts/windows/electron-dist/*.exe
+            artifacts/windows/electron-dist/latest.yml
+            artifacts/linux/bridge/adb-bridge-linux
+            artifacts/linux/electron-dist/*.AppImage
           generate_release_notes: true
 
-      # ── npm Publish ────────────────────────────────
+      # npm Publish
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm version ${{ github.ref_name }} --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies & build for npm
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm install && npm run build:npm
+
       - name: Publish to npm
         if: startsWith(github.ref, 'refs/tags/v')
         run: npm publish --access public
