@@ -87,7 +87,7 @@ jobs:
 
       # Electron AppImage
       - name: Install app dependencies
-        run: npm install
+        run: rm -f package-lock.json && npm install
 
       - name: Build Vite app for Electron
         run: npm run build:electron
@@ -164,7 +164,7 @@ jobs:
 
       - name: Install dependencies & build for npm
         if: startsWith(github.ref, 'refs/tags/v')
-        run: npm install && npm run build:npm
+        run: rm -f package-lock.json && npm install && npm run build:npm
 
       - name: Publish to npm
         if: startsWith(github.ref, 'refs/tags/v')
