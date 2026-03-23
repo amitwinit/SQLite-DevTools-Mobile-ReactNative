@@ -240,9 +240,7 @@ app.whenReady().then(async () => {
 
   createWindow();
 
-  if (app.isPackaged) {
-    setupAutoUpdater();
-  }
+  setupAutoUpdater();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
