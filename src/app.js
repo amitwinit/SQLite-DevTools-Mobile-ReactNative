@@ -3,8 +3,10 @@
  * Replaces all fetch('/api/...') calls with adbClient methods.
  */
 import { AdbClient } from "./adb-client.js";
+import { LocalDb } from "./local-db.js";
 
 const adbClient = new AdbClient();
+const localDb = new LocalDb();
 
 // ──────────────── State ────────────────
 let currentTable = null;
@@ -15,6 +17,13 @@ let activeTab = "query";
 let dbSearchTimeout = null;
 let allPackages = [];
 let selectedPackageName = "";
+/** @type {'device'|'local'} */
+let appMode = "device";
+
+/** Returns the active query client (AdbClient or LocalDb) */
+function getClient() {
+  return appMode === "local" ? localDb : adbClient;
+}
 
 // ──────────────── DOM references ────────────────
 const $ = (id) => document.getElementById(id);
@@ -73,6 +82,10 @@ window.addEventListener("DOMContentLoaded", () => {
   $("refreshTablesBtn").addEventListener("click", refreshTables);
   $("clearQueryBtn").addEventListener("click", clearQuery);
   $("formatQueryBtn").addEventListener("click", formatQuery);
+  $("openLocalBtn").addEventListener("click", () => $("localFileInput").click());
+  $("localFileInput").addEventListener("change", onLocalFileSelected);
+  $("closeLocalBtn").addEventListener("click", closeLocalFile);
+  $("dismissUpdate").addEventListener("click", () => $("updateBar").classList.remove("visible"));
   $("firstBtn").addEventListener("click", firstPage);
   $("prevBtn").addEventListener("click", previousPage);
   $("nextBtn").addEventListener("click", nextPage);
@@ -90,6 +103,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Try bridge first, then fall back to WebUSB auto-reconnect
   tryBridgeThenAutoReconnect();
+
+  // Check for updates (non-blocking)
+  checkForUpdates();
 });
 
 // ──────────────── Bridge + USB Connection ────────────────
@@ -497,7 +513,7 @@ async function loadTables() {
   tablesList.innerHTML = '<div class="loading">Loading tables...</div>';
 
   try {
-    const tables = await adbClient.getTables();
+    const tables = await getClient().getTables();
 
     if (tables.length === 0) {
       tablesList.innerHTML = '<div class="info" style="margin: 10px; font-size: 12px;">No tables found</div>';
@@ -586,7 +602,7 @@ async function toggleAccordion(element, tableName) {
 
 async function loadSidebarStructure(tableName, container) {
   try {
-    const columns = await adbClient.getTableStructure(tableName);
+    const columns = await getClient().getTableStructure(tableName);
     container.dataset.loaded = "true";
 
     if (!columns || columns.length === 0) {
@@ -619,7 +635,7 @@ async function loadTableData(tableName, offset = 0) {
   welcomeMessage.style.display = "none";
 
   try {
-    const data = await adbClient.getTableData(tableName, currentLimit, offset);
+    const data = await getClient().getTableData(tableName, currentLimit, offset);
     currentOffset = offset;
     totalCount = data.total_count;
     displayResults(data.columns, data.rows);
@@ -635,7 +651,7 @@ async function loadTableStructure(tableName) {
   structureContainer.innerHTML = '<div class="loading">Loading structure...</div>';
 
   try {
-    const columns = await adbClient.getTableStructure(tableName);
+    const columns = await getClient().getTableStructure(tableName);
     const headers = ["cid", "name", "type", "notnull", "dflt_value", "pk"];
 
     structureContainer.innerHTML = `
@@ -677,7 +693,7 @@ async function executeQuery() {
   statusBar.textContent = isSelected ? "Executing selected..." : "Executing...";
 
   try {
-    const data = await adbClient.executeQuery(query, currentLimit);
+    const data = await getClient().executeQuery(query, currentLimit);
     displayResults(data.columns, data.rows);
     statusBar.textContent = isSelected
       ? `${data.row_count} rows retrieved (selected query)`
@@ -705,7 +721,7 @@ async function executeAllQuery() {
   statusBar.textContent = "Executing...";
 
   try {
-    const data = await adbClient.executeQuery(fullQuery, currentLimit);
+    const data = await getClient().executeQuery(fullQuery, currentLimit);
     displayResults(data.columns, data.rows);
     statusBar.textContent = `${data.row_count} rows retrieved`;
     $("pagination").style.display = "none";
@@ -866,4 +882,121 @@ function formatQuery() {
   );
   query = query.replace(/,/g, ",\n  ");
   textarea.value = query;
+}
+
+// ──────────────── Local File Upload ────────────────
+
+async function onLocalFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const statusBar = $("statusBar");
+  statusBar.textContent = `Opening ${file.name}...`;
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    await localDb.open(arrayBuffer, file.name);
+
+    // Switch to local mode
+    appMode = "local";
+
+    // Update UI
+    const statusEl = $("connectionStatus");
+    statusEl.textContent = "Local File";
+    statusEl.className = "connection-status bridge";
+
+    $("localFileName").textContent = file.name;
+    $("localFileBadge").classList.add("visible");
+
+    // Disable device-specific controls
+    $("packageSearchInput").disabled = true;
+    $("packageSearchInput").placeholder = "Local file mode";
+    $("databaseSelect").disabled = true;
+    $("databaseSelect").innerHTML = `<option value="">${file.name}</option>`;
+
+    // Load tables from local file
+    await loadTables();
+    statusBar.textContent = `Opened ${file.name}`;
+  } catch (err) {
+    statusBar.textContent = `Failed to open file: ${err.message}`;
+    $("tablesList").innerHTML = `<div class="error" style="margin: 10px; font-size: 12px;">Failed to open file: ${err.message}</div>`;
+  }
+
+  // Reset file input so same file can be re-selected
+  e.target.value = "";
+}
+
+function closeLocalFile() {
+  localDb.close();
+  appMode = "device";
+
+  $("localFileBadge").classList.remove("visible");
+  $("tablesList").innerHTML =
+    '<div class="info" style="margin: 10px; font-size: 12px;">Connect a USB device to get started.</div>';
+  $("resultsContainer").innerHTML = "";
+  $("welcomeMessage").style.display = "block";
+  $("statusBar").textContent = "Ready";
+  $("pagination").style.display = "none";
+
+  // Restore device connection status
+  const isConnected = adbClient.mode === "bridge" ? !!adbClient.bridgeUrl : !!adbClient.adb;
+  if (isConnected) {
+    const statusEl = $("connectionStatus");
+    statusEl.textContent = adbClient.mode === "bridge" ? "ADB Bridge" : "Connected";
+    statusEl.className = adbClient.mode === "bridge" ? "connection-status bridge" : "connection-status connected";
+    $("packageSearchInput").disabled = false;
+    $("packageSearchInput").placeholder = `Search ${allPackages.length} debuggable apps...`;
+    $("databaseSelect").disabled = false;
+  } else {
+    $("connectionStatus").textContent = "Disconnected";
+    $("connectionStatus").className = "connection-status disconnected";
+    $("packageSearchInput").disabled = true;
+    $("packageSearchInput").placeholder = "Connect device first...";
+    $("databaseSelect").disabled = true;
+    $("databaseSelect").innerHTML = '<option value="">Select a package first</option>';
+  }
+}
+
+// ──────────────── Version Check / Update ────────────────
+
+const APP_VERSION = __APP_VERSION__;
+const GITHUB_REPO = "amitwinit/SQLite-DevTools-Mobile-ReactNative";
+
+async function checkForUpdates() {
+  // Skip in Electron — electron-updater handles it
+  if (window.__ELECTRON_UPDATE__) return;
+
+  try {
+    const resp = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!resp.ok) return;
+    const release = await resp.json();
+    const latestTag = (release.tag_name || "").replace(/^v/, "");
+
+    if (latestTag && latestTag !== APP_VERSION && isNewerVersion(latestTag, APP_VERSION)) {
+      const updateBar = $("updateBar");
+      $("updateMessage").textContent = `Version ${latestTag} is available (you have ${APP_VERSION})`;
+      const actionBtn = $("updateAction");
+      actionBtn.textContent = "Download";
+      actionBtn.href = release.html_url;
+      actionBtn.target = "_blank";
+      updateBar.classList.add("visible");
+    }
+  } catch {
+    /* network error, skip */
+  }
+}
+
+function isNewerVersion(latest, current) {
+  const a = latest.split(".").map(Number);
+  const b = current.split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const av = a[i] || 0;
+    const bv = b[i] || 0;
+    if (av > bv) return true;
+    if (av < bv) return false;
+  }
+  return false;
 }

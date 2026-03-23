@@ -1,9 +1,147 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, dialog, Menu } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const { fork } = require("child_process");
 const path = require("path");
 
 let bridge = null;
 let mainWindow = null;
+
+// ── Auto-Updater Setup ─────────────────────────────
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("checking-for-update", () => {
+    console.log("Checking for updates...");
+  });
+
+  autoUpdater.on("update-available", (info) => {
+    dialog
+      .showMessageBox(mainWindow, {
+        type: "info",
+        title: "Update Available",
+        message: `Version ${info.version} is available (you have ${app.getVersion()}).`,
+        detail: "Would you like to download it now?",
+        buttons: ["Download", "Later"],
+        defaultId: 0,
+      })
+      .then((result) => {
+        if (result.response === 0) {
+          autoUpdater.downloadUpdate();
+        }
+      });
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    console.log("No updates available.");
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    if (mainWindow) {
+      mainWindow.setProgressBar(progress.percent / 100);
+    }
+  });
+
+  autoUpdater.on("update-downloaded", () => {
+    if (mainWindow) mainWindow.setProgressBar(-1);
+    dialog
+      .showMessageBox(mainWindow, {
+        type: "info",
+        title: "Update Ready",
+        message: "Update has been downloaded. Restart now to install?",
+        buttons: ["Restart Now", "Later"],
+        defaultId: 0,
+      })
+      .then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.error("Auto-update error:", err.message);
+  });
+
+  // Check for updates after a short delay
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error("Update check failed:", err.message);
+    });
+  }, 3000);
+}
+
+// ── Application Menu ────────────────────────────────
+
+function buildMenu() {
+  const template = [
+    {
+      label: "File",
+      submenu: [
+        { role: "quit" },
+      ],
+    },
+    {
+      label: "View",
+      submenu: [
+        { role: "reload" },
+        { role: "forceReload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
+    {
+      label: "Help",
+      submenu: [
+        {
+          label: "Check for Updates...",
+          click: () => {
+            autoUpdater
+              .checkForUpdates()
+              .then((result) => {
+                if (!result || !result.updateInfo) {
+                  dialog.showMessageBox(mainWindow, {
+                    type: "info",
+                    title: "No Updates",
+                    message: `You are running the latest version (${app.getVersion()}).`,
+                  });
+                }
+              })
+              .catch(() => {
+                dialog.showMessageBox(mainWindow, {
+                  type: "info",
+                  title: "No Updates",
+                  message: `You are running the latest version (${app.getVersion()}).`,
+                });
+              });
+          },
+        },
+        { type: "separator" },
+        {
+          label: "About",
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: "info",
+              title: "About ADB SQLite DevTools",
+              message: `ADB SQLite DevTools v${app.getVersion()}`,
+              detail: "View and query SQLite databases on Android devices.",
+            });
+          },
+        },
+      ],
+    },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+// ── Bundled ADB ─────────────────────────────────────
 
 function setupBundledAdb() {
   if (app.isPackaged) {
@@ -12,6 +150,8 @@ function setupBundledAdb() {
     process.env.PATH = toolsDir + sep + (process.env.PATH || "");
   }
 }
+
+// ── Bridge Server ───────────────────────────────────
 
 function getBridgePath() {
   if (app.isPackaged) {
@@ -61,6 +201,8 @@ function startBridge() {
   });
 }
 
+// ── Window ──────────────────────────────────────────
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -75,13 +217,23 @@ function createWindow() {
   const indexPath = path.join(__dirname, "..", "dist", "index.html");
 
   mainWindow.loadFile(indexPath);
+
+  // Tell renderer that Electron handles updates (skip GitHub API check)
+  mainWindow.webContents.on("did-finish-load", () => {
+    mainWindow.webContents.executeJavaScript("window.__ELECTRON_UPDATE__ = true;");
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 }
 
+// ── App Lifecycle ───────────────────────────────────
+
 app.whenReady().then(async () => {
   setupBundledAdb();
+  buildMenu();
+
   try {
     console.log("Starting ADB bridge server...");
     await startBridge();
@@ -92,6 +244,10 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+
+  if (app.isPackaged) {
+    setupAutoUpdater();
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

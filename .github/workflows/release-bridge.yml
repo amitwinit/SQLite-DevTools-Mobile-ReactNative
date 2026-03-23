@@ -80,6 +80,7 @@ jobs:
           files: |
             bridge/adb-bridge.exe
             electron-dist/*.exe
+            electron-dist/latest.yml
           generate_release_notes: true
 
       # ── npm Publish ────────────────────────────────

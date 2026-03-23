@@ -686,6 +686,92 @@
         .spinning {
             animation: spin 1s linear infinite;
         }
+
+        /* Upload / Local file */
+        .upload-btn {
+            padding: 6px 14px;
+            border: 1px solid #e67e22;
+            border-radius: 4px;
+            background: #e67e22;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s;
+        }
+
+        .upload-btn:hover {
+            background: #d35400;
+        }
+
+        .local-file-badge {
+            display: none;
+            padding: 4px 10px;
+            background: #e67e22;
+            color: white;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .local-file-badge.visible {
+            display: inline-flex;
+        }
+
+        .local-file-badge .close-local {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            padding: 0 2px;
+            line-height: 1;
+        }
+
+        .local-file-badge .close-local:hover {
+            color: #fce4c0;
+        }
+
+        /* Update notification bar */
+        .update-bar {
+            display: none;
+            padding: 8px 20px;
+            background: #2ecc71;
+            color: white;
+            font-size: 13px;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .update-bar.visible {
+            display: flex;
+        }
+
+        .update-bar a,
+        .update-bar button {
+            color: white;
+            font-weight: 600;
+            text-decoration: underline;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            padding: 0;
+        }
+
+        .update-bar .dismiss-update {
+            margin-left: auto;
+            text-decoration: none;
+            font-size: 16px;
+            opacity: 0.8;
+        }
+
+        .update-bar .dismiss-update:hover {
+            opacity: 1;
+        }
     </style>
 </head>
 
@@ -708,6 +794,12 @@
 
     <!-- Main Content -->
     <div class="main-content">
+        <!-- Update notification -->
+        <div class="update-bar" id="updateBar">
+            <span id="updateMessage">A new version is available!</span>
+            <a href="#" id="updateAction">Download</a>
+            <button class="dismiss-update" id="dismissUpdate">&times;</button>
+        </div>
         <!-- Collapsible Configuration Panel -->
         <div class="config-section expanded" id="configSection">
             <div class="config-toggle" id="configToggleBtn">
@@ -720,8 +812,14 @@
                         <label>USB Device</label>
                         <div style="display: flex; gap: 8px; align-items: center;">
                             <button class="usb-connect-btn" id="usbConnectBtn">Connect Device</button>
+                            <button class="upload-btn" id="openLocalBtn" title="Open a .db/.sqlite file from your computer">Open Local DB</button>
+                            <input type="file" id="localFileInput" accept=".db,.sqlite,.sqlite3" style="display:none">
                         </div>
                         <div class="device-status" id="deviceStatus">No device connected</div>
+                        <div class="local-file-badge" id="localFileBadge">
+                            <span id="localFileName"></span>
+                            <button class="close-local" id="closeLocalBtn" title="Close local file">&times;</button>
+                        </div>
                     </div>
                     <div class="config-group" style="position: relative;">
                         <label>Package (debuggable only)</label>

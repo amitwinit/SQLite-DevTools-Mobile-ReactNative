@@ -39,7 +39,10 @@
     "type": "git",
     "url": "https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative"
   },
-  "dependencies": {},
+  "dependencies": {
+    "electron-updater": "^6.8.3",
+    "sql.js": "^1.14.1"
+  },
   "devDependencies": {
     "@yume-chan/adb": "^0.0.24",
     "@yume-chan/adb-credential-web": "^0.0.24",
@@ -80,6 +83,11 @@
     ],
     "win": {
       "target": "nsis"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "amitwinit",
+      "repo": "SQLite-DevTools-Mobile-ReactNative"
     }
   }
 }
