@@ -19,6 +19,8 @@ let allPackages = [];
 let selectedPackageName = "";
 /** @type {'device'|'local'} */
 let appMode = "device";
+/** @type {boolean} */
+let isWaydroid = false;
 
 /** Returns the active query client (AdbClient or LocalDb) */
 function getClient() {
@@ -150,24 +152,32 @@ async function loadBridgeDevices() {
       return;
     }
 
-    if (devices.length === 1) {
-      // Auto-select the only device
-      adbClient.bridgeSerial = devices[0].serial;
-      $("deviceStatus").textContent = devices[0].display_name;
-      $("deviceStatus").classList.add("ok");
-      await loadPackages();
-      return;
+    const device = devices[0];
+    adbClient.bridgeSerial = device.serial;
+    $("deviceStatus").textContent = device.display_name;
+    $("deviceStatus").classList.add("ok");
+
+    // Detect WayDroid
+    if (device.display_name && device.display_name.toLowerCase().includes("waydroid")) {
+      await detectWaydroid();
     }
 
-    // Multiple devices — let user pick
-    adbClient.bridgeSerial = devices[0].serial;
-    $("deviceStatus").textContent = devices[0].display_name;
-    $("deviceStatus").classList.add("ok");
     await loadPackages();
   } catch (err) {
     $("deviceStatus").textContent = `Bridge error: ${err.message}`;
     $("deviceStatus").classList.remove("ok");
   }
+}
+
+async function detectWaydroid() {
+  try {
+    const resp = await fetch(`${adbClient.bridgeUrl}/api/waydroid/detect`);
+    const data = await resp.json();
+    if (data.detected) {
+      isWaydroid = true;
+      $("deviceStatus").textContent += " (WayDroid host access)";
+    }
+  } catch { /* not available */ }
 }
 
 async function tryAutoReconnect() {
@@ -260,8 +270,14 @@ async function loadPackages() {
   allPackages = [];
 
   try {
-    allPackages = await adbClient.getPackages();
-    input.placeholder = `Search ${allPackages.length} debuggable apps...`;
+    if (isWaydroid) {
+      const resp = await fetch(`${adbClient.bridgeUrl}/api/waydroid/packages`);
+      const data = await resp.json();
+      allPackages = data.packages || [];
+    } else {
+      allPackages = await adbClient.getPackages();
+    }
+    input.placeholder = `Search ${allPackages.length} apps...`;
 
     // Restore saved package
     const savedPackage = localStorage.getItem("sqliteViewerPackage");
@@ -360,7 +376,18 @@ async function loadDatabases(isInit = false) {
   select.innerHTML = '<option value="">Loading databases...</option>';
 
   try {
-    const databases = await adbClient.getDatabases(selectedPackageName);
+    let databases;
+    if (isWaydroid) {
+      const resp = await fetch(`${adbClient.bridgeUrl}/api/waydroid/databases`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packageName: selectedPackageName }),
+      });
+      const data = await resp.json();
+      databases = data.databases || [];
+    } else {
+      databases = await adbClient.getDatabases(selectedPackageName);
+    }
     const savedDb = localStorage.getItem("sqliteViewerDatabase");
     select.innerHTML = '<option value="">-- Select database --</option>';
 
@@ -396,6 +423,30 @@ async function onDatabaseChange(isInit = false) {
 
   localStorage.setItem("sqliteViewerDatabase", dbName);
   adbClient.setDatabase(dbName, dbPath);
+
+  // WayDroid: download db from host filesystem and load into sql.js
+  if (isWaydroid) {
+    $("statusBar").textContent = `Loading ${dbName} from WayDroid...`;
+    try {
+      const resp = await fetch(`${adbClient.bridgeUrl}/api/waydroid/read-db`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packageName: selectedPackageName, dbPath }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+      const arrayBuffer = await resp.arrayBuffer();
+      await localDb.open(arrayBuffer, dbName);
+      appMode = "local";
+      $("statusBar").textContent = `Loaded ${dbName} from WayDroid host`;
+    } catch (err) {
+      $("tablesList").innerHTML = `<div class="error" style="margin: 10px; font-size: 12px;">Failed to load WayDroid DB: ${err.message}</div>`;
+      $("statusBar").textContent = `Error: ${err.message}`;
+      return;
+    }
+  }
 
   await updateConnectionStatus();
   await loadTables();

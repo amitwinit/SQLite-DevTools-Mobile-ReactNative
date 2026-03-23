@@ -264,6 +264,183 @@ async function handlePullDb(req, res) {
   }
 }
 
+// ── WayDroid host filesystem access ─────────────────────
+
+const os = require("os");
+const WAYDROID_DATA_PATHS = [
+  path.join(os.homedir(), ".local/share/waydroid/data/data"),
+  "/var/lib/waydroid/data/data",
+];
+
+function findWaydroidDataPath() {
+  for (const p of WAYDROID_DATA_PATHS) {
+    try {
+      fs.accessSync(p, fs.constants.F_OK);
+      return p;
+    } catch { /* not found */ }
+  }
+  return null;
+}
+
+/**
+ * Read a file, trying direct access first, then pkexec cat.
+ * Returns a Buffer.
+ */
+function readProtectedFile(filePath) {
+  return new Promise((resolve, reject) => {
+    // Try direct read first
+    try {
+      const data = fs.readFileSync(filePath);
+      return resolve(data);
+    } catch { /* permission denied, try pkexec */ }
+
+    // Try pkexec (Linux GUI sudo prompt)
+    execFile("pkexec", ["cat", filePath], {
+      timeout: 30_000,
+      maxBuffer: MAX_BUFFER,
+      encoding: "buffer",
+    }, (err, stdout) => {
+      if (err) {
+        reject(new Error(`Cannot read file (permission denied). Try: sudo chmod -R o+r ~/.local/share/waydroid/data/data/`));
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
+}
+
+/**
+ * List directory contents, trying direct access first, then pkexec ls.
+ */
+function listProtectedDir(dirPath) {
+  return new Promise((resolve, reject) => {
+    try {
+      const entries = fs.readdirSync(dirPath);
+      return resolve(entries);
+    } catch { /* permission denied */ }
+
+    execFile("pkexec", ["ls", dirPath], {
+      timeout: 10_000,
+    }, (err, stdout) => {
+      if (err) {
+        reject(new Error("Cannot list directory (permission denied)"));
+      } else {
+        resolve(stdout.split("\n").map(s => s.trim()).filter(Boolean));
+      }
+    });
+  });
+}
+
+async function handleWaydroidDetect(_req, res) {
+  const dataPath = findWaydroidDataPath();
+  json(res, 200, { detected: !!dataPath, dataPath });
+}
+
+async function handleWaydroidPackages(_req, res) {
+  const dataPath = findWaydroidDataPath();
+  if (!dataPath) {
+    json(res, 404, { error: "WayDroid data path not found" });
+    return;
+  }
+
+  try {
+    const entries = await listProtectedDir(dataPath);
+    // Filter to likely app packages (com.xxx.xxx pattern)
+    const packages = entries.filter(e => e.includes(".") && !e.startsWith("."));
+    packages.sort();
+    json(res, 200, { packages });
+  } catch (err) {
+    json(res, 500, { error: err.message });
+  }
+}
+
+async function handleWaydroidDatabases(req, res) {
+  let body;
+  try {
+    body = JSON.parse(await readBody(req));
+  } catch {
+    json(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const { packageName } = body;
+  if (!packageName) {
+    json(res, 400, { error: "Missing packageName" });
+    return;
+  }
+
+  const dataPath = findWaydroidDataPath();
+  if (!dataPath) {
+    json(res, 404, { error: "WayDroid data path not found" });
+    return;
+  }
+
+  const locations = ["databases", "files", "files/SQLite"];
+  const databases = [];
+  const seen = new Set();
+
+  for (const loc of locations) {
+    const dirPath = path.join(dataPath, packageName, loc);
+    try {
+      const entries = await listProtectedDir(dirPath);
+      for (const f of entries) {
+        if (f.endsWith(".db") || f.endsWith(".sqlite") || f.endsWith(".sqlite3")) {
+          if (!seen.has(f)) {
+            seen.add(f);
+            databases.push({ name: f, path: `${loc}/${f}` });
+          }
+        }
+      }
+    } catch { /* dir doesn't exist */ }
+  }
+
+  json(res, 200, { databases });
+}
+
+async function handleWaydroidReadDb(req, res) {
+  let body;
+  try {
+    body = JSON.parse(await readBody(req));
+  } catch {
+    json(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const { packageName, dbPath } = body;
+  if (!packageName || !dbPath) {
+    json(res, 400, { error: "Missing packageName or dbPath" });
+    return;
+  }
+
+  const dataPath = findWaydroidDataPath();
+  if (!dataPath) {
+    json(res, 404, { error: "WayDroid data path not found" });
+    return;
+  }
+
+  const fullPath = path.join(dataPath, packageName, dbPath);
+
+  // Prevent path traversal
+  if (!fullPath.startsWith(dataPath)) {
+    json(res, 400, { error: "Invalid path" });
+    return;
+  }
+
+  try {
+    const data = await readProtectedFile(fullPath);
+    const fileName = dbPath.split("/").pop() || "database.db";
+    cors(res);
+    res.writeHead(200, {
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Content-Length": data.length,
+    });
+    res.end(data);
+  } catch (err) {
+    json(res, 500, { error: err.message });
+  }
+}
+
 // ── Exports (for use by cli/server.cjs and electron) ───
 
 /**
@@ -296,6 +473,18 @@ async function handleRequest(req, res) {
       return true;
     } else if (p === "/api/pull-db" && req.method === "POST") {
       await handlePullDb(req, res);
+      return true;
+    } else if (p === "/api/waydroid/detect" && req.method === "GET") {
+      await handleWaydroidDetect(req, res);
+      return true;
+    } else if (p === "/api/waydroid/packages" && req.method === "GET") {
+      await handleWaydroidPackages(req, res);
+      return true;
+    } else if (p === "/api/waydroid/databases" && req.method === "POST") {
+      await handleWaydroidDatabases(req, res);
+      return true;
+    } else if (p === "/api/waydroid/read-db" && req.method === "POST") {
+      await handleWaydroidReadDb(req, res);
       return true;
     }
   } catch (err) {
