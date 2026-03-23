@@ -30,6 +30,10 @@ export class AdbClient {
     this.bridgeUrl = "";
     /** @type {string} */
     this.bridgeSerial = "";
+    /** @type {boolean|null} null = not yet tested */
+    this._runAsWorks = null;
+    /** @type {string} app data dir when run-as doesn't work */
+    this._appDataDir = "";
   }
 
   // ──────────────── Bridge transport ────────────────
@@ -213,6 +217,8 @@ export class AdbClient {
     this.dbName = "";
     this.dbPath = "";
     this.sqlite3Path = "";
+    this._runAsWorks = null;
+    this._appDataDir = "";
   }
 
   setDatabase(dbName, dbPath) {
@@ -246,9 +252,38 @@ export class AdbClient {
     return text.replace(/\r\n/g, "\n").trimEnd();
   }
 
-  /** Run a shell command under `run-as <package>` */
+  /**
+   * Run a shell command under `run-as <package>`.
+   * Falls back to direct access via the app data dir on environments
+   * where run-as doesn't work (e.g. WayDroid, rooted emulators).
+   */
   async runAs(command) {
-    return this.shell(`run-as ${this.packageName} ${command}`);
+    // Test run-as once per package
+    if (this._runAsWorks === null) {
+      try {
+        await this.shell(`run-as ${this.packageName} id`);
+        this._runAsWorks = true;
+      } catch {
+        this._runAsWorks = false;
+        // Resolve the app data directory
+        try {
+          const info = await this.shell(
+            `dumpsys package ${this.packageName} | grep dataDir | head -1`
+          );
+          const match = info.match(/dataDir=(.+)/);
+          this._appDataDir = match ? match[1].trim() : `/data/data/${this.packageName}`;
+        } catch {
+          this._appDataDir = `/data/data/${this.packageName}`;
+        }
+      }
+    }
+
+    if (this._runAsWorks) {
+      return this.shell(`run-as ${this.packageName} ${command}`);
+    }
+
+    // Fallback: run command directly from the app data directory
+    return this.shell(`cd ${this._appDataDir} && ${command}`);
   }
 
   // ──────────────── Packages ────────────────
@@ -297,8 +332,8 @@ export class AdbClient {
 
     for (const loc of locations) {
       try {
-        const out = await this.shell(
-          `run-as ${pkg} ls ${loc} 2>/dev/null`
+        const out = await this.runAs(
+          `ls ${loc} 2>/dev/null`
         );
         for (const file of out.split("\n")) {
           const f = file.trim();
@@ -325,8 +360,8 @@ export class AdbClient {
     const pkg = packageName || this.packageName;
     if (!pkg) throw new Error("No package selected.");
 
-    const out = await this.shell(
-      `run-as ${pkg} find . -name "*.db" -o -name "*.sqlite" -o -name "*.sqlite3" 2>/dev/null`
+    const out = await this.runAs(
+      `find . -name "*.db" -o -name "*.sqlite" -o -name "*.sqlite3" 2>/dev/null`
     );
 
     const q = (query || "").toLowerCase();

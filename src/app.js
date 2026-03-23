@@ -1026,7 +1026,7 @@ const GITHUB_REPO = "amitwinit/SQLite-DevTools-Mobile-ReactNative";
 
 async function checkForUpdates() {
   // Skip in Electron — electron-updater handles it
-  if (window.__ELECTRON_UPDATE__) return;
+  if (navigator.userAgent.includes("Electron")) return;
 
   try {
     const resp = await fetch(

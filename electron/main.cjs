@@ -218,11 +218,6 @@ function createWindow() {
 
   mainWindow.loadFile(indexPath);
 
-  // Tell renderer that Electron handles updates (skip GitHub API check)
-  mainWindow.webContents.on("did-finish-load", () => {
-    mainWindow.webContents.executeJavaScript("window.__ELECTRON_UPDATE__ = true;");
-  });
-
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
