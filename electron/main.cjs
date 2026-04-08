@@ -75,12 +75,40 @@ function setupAutoUpdater() {
 // ── Application Menu ────────────────────────────────
 
 function buildMenu() {
+  const isMac = process.platform === "darwin";
   const template = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              {
+                label: "About ADB SQLite DevTools",
+                click: () => {
+                  dialog.showMessageBox(mainWindow, {
+                    type: "info",
+                    title: "About ADB SQLite DevTools",
+                    message: `ADB SQLite DevTools v${app.getVersion()}`,
+                    detail:
+                      "View and query SQLite databases on Android devices.",
+                  });
+                },
+              },
+              { type: "separator" },
+              { role: "services" },
+              { type: "separator" },
+              { role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          },
+        ]
+      : []),
     {
       label: "File",
-      submenu: [
-        { role: "quit" },
-      ],
+      submenu: [isMac ? { role: "close" } : { role: "quit" }],
     },
     {
       label: "View",

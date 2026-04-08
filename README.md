@@ -42,14 +42,24 @@ Then `npm run sqlite-viewer` opens the viewer. Works great alongside React Nativ
 
 ### Desktop App
 
-Download the Windows installer from [Releases](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases). Double-click to launch — the bridge server starts automatically.
+ADB is bundled — no Android SDK required. Double-click to launch.
+
+| Platform | Download |
+|----------|----------|
+| Windows | [ADB-SQLite-DevTools-win.exe](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases/latest/download/ADB-SQLite-DevTools-win.exe) |
+| macOS (Apple Silicon) | [ADB-SQLite-DevTools-mac-arm64.dmg](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases/latest/download/ADB-SQLite-DevTools-mac-arm64.dmg) |
+| macOS (Intel) | [ADB-SQLite-DevTools-mac-x64.dmg](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases/latest/download/ADB-SQLite-DevTools-mac-x64.dmg) |
+| Linux | [ADB-SQLite-DevTools-linux.AppImage](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases/latest/download/ADB-SQLite-DevTools-linux.AppImage) |
 
 ### Hosted Version + ADB Bridge
 
 Use the deployed version at **[amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative](https://amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative/)** together with the standalone ADB Bridge.
 
-1. Download `adb-bridge.exe` from [Releases](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases)
-2. Run `adb-bridge.exe`
+1. Download the bridge for your platform from [Releases](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases):
+   - Windows: `adb-bridge.exe`
+   - macOS: `adb-bridge-macos`
+   - Linux: `adb-bridge-linux`
+2. Run the bridge binary
 3. Open the hosted website — it auto-detects the bridge
 
 ```

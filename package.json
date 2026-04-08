@@ -81,12 +81,24 @@
         "to": "sqlite3-arm64"
       }
     ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "artifactName": "ADB-SQLite-DevTools-mac-${arch}.${ext}"
+    },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "ADB-SQLite-DevTools-win.${ext}"
     },
     "linux": {
       "target": "AppImage",
-      "category": "Development"
+      "category": "Development",
+      "artifactName": "ADB-SQLite-DevTools-linux.${ext}"
     },
     "publish": {
       "provider": "github",
