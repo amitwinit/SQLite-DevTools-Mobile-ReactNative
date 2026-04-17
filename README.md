@@ -51,6 +51,14 @@ ADB is bundled — no Android SDK required. Double-click to launch.
 | macOS (Intel) | [ADB-SQLite-DevTools-mac-x64.dmg](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases/latest/download/ADB-SQLite-DevTools-mac-x64.dmg) |
 | Linux | [ADB-SQLite-DevTools-linux.AppImage](https://github.com/amitwinit/SQLite-DevTools-Mobile-ReactNative/releases/latest/download/ADB-SQLite-DevTools-linux.AppImage) |
 
+**macOS Gatekeeper:** The app isn't signed with an Apple Developer certificate, so macOS will show *"ADB SQLite DevTools is damaged and can't be opened"*. After dragging it to Applications, run this once in Terminal to allow it:
+
+```bash
+xattr -cr "/Applications/ADB SQLite DevTools.app"
+```
+
+Then open normally. The app is not actually damaged — macOS just rejects unsigned apps downloaded from the web by default.
+
 ### Hosted Version + ADB Bridge
 
 Use the deployed version at **[amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative](https://amitwinit.github.io/SQLite-DevTools-Mobile-ReactNative/)** together with the standalone ADB Bridge.
