@@ -810,10 +810,14 @@
                 <div class="config-row">
                     <div class="config-group">
                         <label>USB Device</label>
-                        <div style="display: flex; gap: 8px; align-items: center;">
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                             <button class="usb-connect-btn" id="usbConnectBtn">Connect Device</button>
                             <button class="upload-btn" id="openLocalBtn" title="Open a .db/.sqlite file from your computer">Open Local DB</button>
                             <input type="file" id="localFileInput" accept=".db,.sqlite,.sqlite3" style="display:none">
+                        </div>
+                        <div id="deviceSelectRow" style="display: none; margin-top: 6px; gap: 6px; align-items: center;">
+                            <select id="deviceSelect" style="flex: 1; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; background: white; color: #495057; font-size: 12px;"></select>
+                            <button id="refreshDevicesBtn" title="Refresh device list" style="padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; background: white; cursor: pointer; font-size: 12px;">&#x21bb;</button>
                         </div>
                         <div class="device-status" id="deviceStatus">No device connected</div>
                         <div class="local-file-badge" id="localFileBadge">

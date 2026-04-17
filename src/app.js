@@ -98,6 +98,8 @@ window.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter") gotoPage();
   });
   $("limitSelect").addEventListener("change", changeLimit);
+  $("deviceSelect").addEventListener("change", onDeviceSelectChange);
+  $("refreshDevicesBtn").addEventListener("click", refreshDeviceList);
 
   // Tabs
   document.querySelectorAll(".tab").forEach((tab) => {
@@ -149,13 +151,21 @@ async function loadBridgeDevices() {
     if (devices.length === 0) {
       $("deviceStatus").textContent = "Bridge connected — no devices found. Plug in a phone.";
       $("deviceStatus").classList.remove("ok");
+      populateDeviceSelect([]);
       return;
     }
 
-    const device = devices[0];
+    // Pick saved serial if still present, otherwise first device
+    const savedSerial = localStorage.getItem("sqliteViewerDevice");
+    const match = devices.find((d) => d.serial === savedSerial);
+    const device = match || devices[0];
+
     adbClient.bridgeSerial = device.serial;
+    localStorage.setItem("sqliteViewerDevice", device.serial);
     $("deviceStatus").textContent = device.display_name;
     $("deviceStatus").classList.add("ok");
+
+    populateDeviceSelect(devices, device.serial);
 
     // Detect WayDroid
     if (device.display_name && device.display_name.toLowerCase().includes("waydroid")) {
@@ -166,6 +176,93 @@ async function loadBridgeDevices() {
   } catch (err) {
     $("deviceStatus").textContent = `Bridge error: ${err.message}`;
     $("deviceStatus").classList.remove("ok");
+  }
+}
+
+// ──────────────── Device Selector ────────────────
+
+function populateDeviceSelect(devices, selectedSerial) {
+  const select = $("deviceSelect");
+  const row = $("deviceSelectRow");
+
+  select.innerHTML = devices
+    .map(
+      (d) =>
+        `<option value="${d.serial}"${d.serial === selectedSerial ? " selected" : ""}>${d.display_name}</option>`
+    )
+    .join("");
+
+  // Only show the selector when there are 2+ devices
+  row.style.display = devices.length >= 2 ? "flex" : "none";
+}
+
+async function onDeviceSelectChange() {
+  const select = $("deviceSelect");
+  const serial = select.value;
+  if (!serial) return;
+
+  localStorage.setItem("sqliteViewerDevice", serial);
+  isWaydroid = false;
+  $("statusBar").textContent = "Switching device...";
+
+  try {
+    if (adbClient.mode === "bridge") {
+      adbClient.bridgeSerial = serial;
+      const devices = await adbClient.getDevices();
+      const device = devices.find((d) => d.serial === serial);
+      if (device) {
+        $("deviceStatus").textContent = device.display_name;
+        $("deviceStatus").classList.add("ok");
+        if (device.display_name && device.display_name.toLowerCase().includes("waydroid")) {
+          await detectWaydroid();
+        }
+      }
+    } else {
+      await adbClient.connectBySerial(serial);
+      const info = adbClient.getDeviceInfo();
+      $("deviceStatus").textContent = info.display_name;
+      $("deviceStatus").classList.add("ok");
+    }
+
+    // Reset package/db selection for the new device
+    selectedPackageName = "";
+    localStorage.removeItem("sqliteViewerPackage");
+    $("packageSearchInput").value = "";
+    $("packageComboWrapper").classList.remove("has-value");
+    $("databaseSelect").innerHTML = '<option value="">Select a package first</option>';
+    $("databaseSelect").disabled = true;
+    $("tablesList").innerHTML = '<div class="info" style="margin: 10px; font-size: 12px;">Loading packages...</div>';
+
+    await loadPackages();
+    $("statusBar").textContent = "Device switched";
+  } catch (err) {
+    $("deviceStatus").textContent = `Error: ${err.message}`;
+    $("deviceStatus").classList.remove("ok");
+    $("statusBar").textContent = `Error: ${err.message}`;
+  }
+}
+
+async function refreshDeviceList() {
+  const btn = $("refreshDevicesBtn");
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = "…";
+  try {
+    const devices = await adbClient.getDevices();
+    const currentSerial =
+      adbClient.mode === "bridge"
+        ? adbClient.bridgeSerial
+        : adbClient.device?.serial || "";
+    populateDeviceSelect(devices, currentSerial);
+    if (devices.length === 0) {
+      $("deviceStatus").textContent = "No devices found. Plug in a phone.";
+      $("deviceStatus").classList.remove("ok");
+    }
+  } catch (err) {
+    $("deviceStatus").textContent = `Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
   }
 }
 
@@ -184,17 +281,18 @@ async function tryAutoReconnect() {
   try {
     const devices = await adbClient.getDevices();
     const savedSerial = localStorage.getItem("sqliteViewerDevice");
-    if (devices.length === 1) {
+    const match = savedSerial ? devices.find((d) => d.serial === savedSerial) : null;
+    const target = match || (devices.length === 1 ? devices[0] : null);
+
+    if (target) {
       $("deviceStatus").textContent = "Reconnecting...";
-      await adbClient.connectBySerial(devices[0].serial);
+      await adbClient.connectBySerial(target.serial);
       await onDeviceConnected();
-    } else if (savedSerial) {
-      const match = devices.find((d) => d.serial === savedSerial);
-      if (match) {
-        $("deviceStatus").textContent = "Reconnecting...";
-        await adbClient.connectBySerial(savedSerial);
-        await onDeviceConnected();
-      }
+      populateDeviceSelect(devices, target.serial);
+    } else if (devices.length >= 2) {
+      // Multiple paired devices but no saved one — let user pick
+      populateDeviceSelect(devices, "");
+      $("deviceStatus").textContent = `${devices.length} paired devices — pick one to connect`;
     }
   } catch {
     /* no previously paired device or connection failed */
@@ -218,6 +316,7 @@ async function onUsbConnectClick() {
     $("databaseSelect").disabled = true;
     $("tablesList").innerHTML =
       '<div class="info" style="margin: 10px; font-size: 12px;">Connect a USB device to get started.</div>';
+    $("deviceSelectRow").style.display = "none";
     return;
   }
 
@@ -244,6 +343,12 @@ async function onDeviceConnected() {
   $("connectionStatus").className = "connection-status connected";
 
   localStorage.setItem("sqliteViewerDevice", info.serial);
+
+  // Refresh selector so user can switch to other paired devices
+  try {
+    const devices = await adbClient.getDevices();
+    populateDeviceSelect(devices, info.serial);
+  } catch { /* ignore */ }
 
   // Cascade: load packages
   await loadPackages();
