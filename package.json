@@ -1,6 +1,6 @@
 {
   "name": "adb-sqlite-viewer",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "ADB SQLite database viewer for Android — inspect tables, schemas, and run queries on-device",
   "type": "module",
   "main": "electron/main.cjs",
