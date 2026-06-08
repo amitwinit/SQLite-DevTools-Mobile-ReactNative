@@ -111,6 +111,24 @@ function buildMenu() {
       submenu: [isMac ? { role: "close" } : { role: "quit" }],
     },
     {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        ...(isMac
+          ? [
+              { role: "pasteAndMatchStyle" },
+              { role: "delete" },
+              { role: "selectAll" },
+            ]
+          : [{ role: "delete" }, { type: "separator" }, { role: "selectAll" }]),
+      ],
+    },
+    {
       label: "View",
       submenu: [
         { role: "reload" },
